@@ -1,0 +1,2 @@
+--- scripts/run_tests.sh.orig
++++ scripts/run_tests.sh

@@ -1,0 +1,2 @@
+Makefile_bad:26: warning: undefined variable '@'
+Makefile_bad:26: *** missing separator.  Stop.
