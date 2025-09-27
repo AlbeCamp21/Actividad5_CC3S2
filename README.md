@@ -125,3 +125,48 @@ make -f Makefile_bad build |& tee evidencia/missing-separator.txt || echo "error
 ![img1_8](img/img1_8.png)
 
 En los archivos `Makefile`, las líneas de receta que indiquen que hay comandos a ejecutar deben iniciar con un `TAB` de manera obligatoria (no con espacios). Entonces, si se usan espacios por error, `make` nos mostrará el mensaje `missing separator`, indicándonos que no es válida la indentación. Ahora, para diagnosticarlo rápidamente es recomendable ver las líneas donde nos muestra el error y corregirlas.
+
+## **Parte 2: Leer - Analizar un repositorio completo**
+
+### **Ejercicios**
+
+**1. Ejecuta `make -n all` para un dry-run que muestre comandos sin ejecutarlos; identifica expansiones `$@` y `$<`, el orden de objetivos y cómo `all` encadena `tools`, `lint`, `build`, `test`, `package`.**
+
+![img2_1](img/img2_1.png)
+
+El comando `make -n all` revela que el objetivo `all` ejecuta una cadena en el siguiente orden: `tools, lint, build, test, package`.
+Durante el dry-run podemos observar las expansiones de variables automáticas, según en Makefile: `$(@D)` se expande al directorio del target (como el caso de `out` en `mkdir -p out`), `$<` representa el primer prerrequisito (`src/hello.py` en `python3 src/hello.py > out/hello.txt`), y `$@` es el target completo (`out/hello.txt` y `dist/app.tar.gz`). Entonces, el flujo comienza verificando las herramientas disponibles (python3 y shellcheck, por ejemplo), luego ejecuta linters en los scripts bash y python, construye el archivo output usando `src/hello.py`, ejecuta las pruebas unitarias y los scripts de testing y, finalmente, empaqueta todo en un tarball reproducible con timestamps.
+
+**2. Ejecuta `make -d build` y localiza líneas "Considerando el archivo objetivo" y "Debe deshacerse",  explica por qué recompila o no `out/hello.txt` usando marcas de tiempo y cómo `mkdir -p $(@D)` garantiza el directorio.**
+
+![img2_2](img/img2_2.png)
+
+Luego de ejecutar `make -d build`, el output nos  muestra el proceso de decisión que se basan en marcas de tiempo. Primeramente, Make evalúa si `out/hello.txt` necesita recompilarse comparando los timestamps, encuentra que el prerrequisito (`src/hello.py`) es más antiguo que el target `out/hello.txt` (En la parte: "Prerequisite 'src/hello.py' is older than target 'out/hello.txt'"), por lo que Make concluye: "No need to remake target 'out/hello.txt'".
+El objetivo de `build` es un target PHONY que no existe como archivo real, por eso vemos la línea: "File 'build' does not exist" y "Must remake target 'build'", pero como no hay comandos propios, simplemente verifica sus dependencias. 
+El comando `mkdir -p $(@D)` garantiza que el directorio padre del target exista antes de crear el archivo, se usa la opción `-p` para crear directorios sin fallar si ya existen, así aseguramos que `python3 src/hello.py > out/hello.txt` pueda ejecutarse exitosamente.
+
+**3. Ejecuta `make verify-repro`; observa que genera dos artefactos y compara `SHA256_1` y `SHA256_2`. Si difieren, hipótesis: zona horaria, versión de tar, contenido no determinista o variables de entorno no fijadas.**
+
+![img2_3](img/img2_3.png)
+
+El comando `make verify-repro` genera dos artefactos con SHA256 como hash (`ad917bfc2c042f07c8de4ef70fcbff91a49977d589de88932da474592ba1c545`), confirmando la reproducibilidad. El proceso primeramente limpia directorios, construye el paquete dos veces de manera independiente y compara los hashes resultantes. Ahora, la reproducibilidad se consigue mediante parámetros específicos: `--sort=name` ordena archivos alfabéticamente, `--numeric-owner` y `--owner=0 --group=0` fijan ownership a root, y `--mtime='UTC 1970-01-01'` establece timestamps deterministas en UTC. Entonces, si los hashes son diferentes, las hipótesis podrían ser: zona horaria inconsistente afectando timestamps, contenido no determinista como números random en el código fuente o variables de entorno no controladas que afectan la generación.
+
+## **Parte 3: Extender**
+
+### **3.1. `lint` mejorado**
+
+Rompe a propósito un quoting en `scripts/run_tests.sh` (por ejemplo, quita comillas a una variable que pueda contener espacios) y ejecuta `make lint`. `shellcheck` debe reportar el problema; corrígelo y vuelve a correr. Luego ejecuta `make format` para aplicar `shfmt` y estandarizar estilo. Si tienes `ruff`, inspecciona Python y corrige advertencias. *(Nota: si `ruff` no está instalado, el Makefile ya lo trata como opcional y no debe romper la build.)*
+
+```bash
+make lint
+make format
+ruff check src || true
+```
+
+Se le quitó la comilla doble final para la variaable `tmp`, quedando así: `tmp="$(mktemp)`.
+
+![img3_1](img/img3_1.png)
+
+Luego de la corrección, se ejecuta nuevamente `make lint` y `make format`.
+
+![img3_2](img/img3_2.png)
